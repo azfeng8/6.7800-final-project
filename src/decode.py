@@ -2,10 +2,10 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-plot = False
-# 5000 iters had good result
-iters = 5000
-T = 200
+plot = True
+iters = 3000
+T = 150
+# iters = 100
 # gt_path = './data/sample/short_plaintext.txt' 
 gt_path = './data/sample/plaintext.txt'
 
@@ -22,7 +22,7 @@ alphabet_arr = np.loadtxt('./data/alphabet.csv', delimiter=',', dtype=str).squee
 alphabet = {letter: idx for idx, letter in enumerate(alphabet_arr)}
 
 
-def decode(ciphertext: str, has_breakpoint: bool, plot_dir=plot_dir) -> str:
+def decode(ciphertext: str, has_breakpoint: bool, gt_arr=gt_arr, ret_decode_corr_counts=False, plot_dir=plot_dir) -> str:
 
     def sample_proposal(f:np.ndarray):
         i,j = np.random.choice(len(P), size=2, replace=False)
@@ -102,23 +102,23 @@ def decode(ciphertext: str, has_breakpoint: bool, plot_dir=plot_dir) -> str:
 
     print("Iters:", iters)
     if plot:
-        np.savetxt(plot_dir + '/log_likelihoods.txt', np.array(state_log_likelihoods), fmt="%.4f")
-        plt.figure()
-        plt.plot(np.arange(iters), state_log_likelihoods)
-        plt.title("Log likelihoods")
-        plt.xlabel("Iteration #")
-        plt.ylabel("Log(P(accepted state))")
-        plt.savefig(plot_dir + '/3a.png')
+        # np.savetxt(plot_dir + '/log_likelihoods.txt', np.array(state_log_likelihoods), fmt="%.8f")
+        # plt.figure()
+        # plt.plot(np.arange(iters), state_log_likelihoods)
+        # plt.title("Log likelihoods")
+        # plt.xlabel("Iteration #")
+        # plt.ylabel("Log(P(accepted state))")
+        # plt.savefig(plot_dir + '/3a.png')
 
-        np.savetxt(plot_dir + '/acceptance_rates.txt', np.array(acceptance_rates), fmt="%.4f")
-        plt.figure()
-        plt.plot(np.arange(iters), acceptance_rates)
-        plt.title(f"Acceptance Rates, sliding window avg of {T} iterations")
-        plt.xlabel("Iteration #")
-        plt.ylabel("Acceptance rate")
-        plt.savefig(plot_dir + '/3b.png')
+        # np.savetxt(plot_dir + '/acceptance_rates.txt', np.array(acceptance_rates), fmt="%.8f")
+        # plt.figure()
+        # plt.plot(np.arange(iters), acceptance_rates)
+        # plt.title(f"Acceptance Rates, sliding window avg of {T} iterations")
+        # plt.xlabel("Iteration #")
+        # plt.ylabel("Acceptance rate")
+        # plt.savefig(plot_dir + '/3b.png')
 
-        np.savetxt(plot_dir + '/decode_acc.txt', np.array(decode_acc), fmt="%.4f")
+        np.savetxt(plot_dir + '/decode_acc.txt', np.array(decode_acc), fmt="%.8f")
         plt.figure()
         plt.plot(np.arange(iters), decode_acc)
         plt.title("Decoding accuracy")
@@ -127,20 +127,37 @@ def decode(ciphertext: str, has_breakpoint: bool, plot_dir=plot_dir) -> str:
         plt.savefig(plot_dir +'/3c.png')
 
     plaintext = get_plaintext(f, ciphertext)
+    if ret_decode_corr_counts: return plaintext, np.array(decode_acc) * N
     return plaintext
 
 def decode_segments_indep(ciphertext):
     import os
 
-    segment_length = len(ciphertext) // 17
+    num_segments = 17 * 2
+    segment_length = len(ciphertext) // num_segments
     plaintext = ''
+    decode_accs_segments = []
     for i in range(0, len(ciphertext), int(segment_length)):
-        segment_dir = os.path.join(plot_dir, f"segment_{i}_{i+segment_length}")
-        os.makedirs(segment_dir exist_ok=True)
-        plaintext += decode(ciphertext[i: i + segment_length])
+        segment_dir = os.path.join(plot_dir, 'segments', f'len_{segment_length}', f"segment_{i}_{i+segment_length}")
+        os.makedirs(segment_dir, exist_ok=True)
+        pt, decode_correct = decode(ciphertext[i: i + segment_length], False, ret_decode_corr_counts=True, plot_dir=segment_dir, gt_arr=gt_arr[i:i+segment_length])
+        plaintext += pt
+        # N = min(segment_length, len(ciphertext) - i)
+        decode_accs_segments.append(decode_correct / N)
+        print(pt)
+    print(plaintext)
+    run_dir = os.path.join(plot_dir, "segments", f"len_{segment_length}")
+    overall_decode_acc = np.array(decode_accs_segments).sum(axis=0) / N
+    np.savetxt(os.path.join(run_dir, "overall_decode_acc.txt"), overall_decode_acc, fmt="%.8f")
+    plt.figure()
+    plt.plot(np.arange(iters), overall_decode_acc)
+    plt.title(f"Decode segments independently: {len(decode_accs_segments)} segments, length ~{segment_length}")
+    plt.xlabel("# iterations")
+    plt.ylabel("decode accuracy")
+    plt.savefig(run_dir + '/decode_acc.png')
     
-
+    
 if __name__ == "__main__":
-    with open('./data/samples/ciphertext.txt', 'r') as f:
+    with open('./data/sample/ciphertext.txt', 'r') as f:
         ciphertext = f.readlines()[0]
     decode_segments_indep(ciphertext)
