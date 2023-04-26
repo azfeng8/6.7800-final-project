@@ -16,7 +16,7 @@ A default implementation calling decode.py has been provided below.
 """
 
 import sys
-from src.decode import decode
+from src.decode import fast_decode
 
 has_breakpoint = sys.argv[2].lower() == "true"
-print(decode(sys.argv[1], has_breakpoint))
+print(fast_decode(sys.argv[1], has_breakpoint))
