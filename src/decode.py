@@ -1,5 +1,4 @@
 import numpy as np
-from tqdm import tqdm
 
 iters = 1200
 
