@@ -6,7 +6,7 @@ import numpy as np
 
 # Threshhold from problem 3e in Part I
 entropy_thresh = -3.6
-start = time()
+# start = time()
 
 P = np.loadtxt('./data/letter_probabilities.csv', delimiter=',')
 M = np.loadtxt('./data/letter_transition_matrix.csv', delimiter=',')
