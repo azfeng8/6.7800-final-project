@@ -16,11 +16,14 @@ A default implementation calling decode.py has been provided below.
 """
 
 import sys
-from src.decode import fast_decode
+from src.decode import decode_no_bp, decode_bp
 # from part_1_decode import decode
 
 has_breakpoint = sys.argv[2].lower() == "true"
-print(fast_decode(sys.argv[1], has_breakpoint))
+if has_breakpoint:
+    print(decode_bp(sys.argv[1]))
+else:
+    print(decode_no_bp(sys.argv[1]))
 
 # part1 = sys.argv[2].lower() == "true"
 # if part1:
