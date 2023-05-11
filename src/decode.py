@@ -1,12 +1,12 @@
 DEBUG = False
 if DEBUG:
     from time import time
+    start = time()
 import numpy as np
 # from itertools import combinations
 
 # Threshhold from problem 3e in Part I
 entropy_thresh = -3.6
-# start = time()
 
 P = np.loadtxt('./data/letter_probabilities.csv', delimiter=',')
 M = np.loadtxt('./data/letter_transition_matrix.csv', delimiter=',')
@@ -36,62 +36,62 @@ def fast_decode(ciphertext: str, has_breakpoint: bool) -> str:
     N = float(len(ciphertext))
 
     # combs =list(combinations(range(len(P)), 2))
-    # def sample_proposal(f:np.ndarray):
-    #     """Returns the first nonzero proposal sampled"""
-    #     ij = np.random.choice(len(combs))
-    #     i,j = combs[ij]
-    #     f_i,f_j = f[i], f[j]
-    #     f[i] = f_j
-    #     f[j] = f_i
-    #     while not is_nonzero(f):
-    #         combs.pop(ij) # combs[ij] was zero, so don't try sampling this again
-    #         f[i] = f_i
-    #         f[j] = f_j
-    #         ij = np.random.choice(len(combs))
-    #         i,j = combs[ij]
-    #         f_i,f_j = f[i], f[j]
-    #         f[i] = f_j
-    #         f[j] = f_i
-    #     return f
 
     def is_nonzero(f):
-        if np.isclose(P[inverse(f, ciphertext[0])], 0): return False
-        for i in range(len(ciphertext))[1:]:
-            if np.isclose(M[inverse(f, ciphertext[i]), inverse(f, ciphertext[i-1])], 0): return False
+        plain_tok = inverse_vec(f, ciphertext)
+        if np.isclose(P[plain_tok[0]], 0): return False
+        if np.any(np.isclose(M[plain_tok[1:], plain_tok[:-1]], 0)): return False
         return True
 
     def compute_acceptance(f, f_prime):
-        "Vectorize"
+        "Vectorized"
         p_y_f, p_y_f_prime = 0,0
-        for i in range(len(ciphertext)):
-            if i==0:
-                p_y_f += np.log2(P[inverse(f, ciphertext[i])])
-                p_y_f_prime +=np.log2( P[inverse(f_prime, ciphertext[i])])
-            else:
-                p_y_f += np.log2( M[inverse(f, ciphertext[i]), inverse(f, ciphertext[i-1])]).squeeze()
-                p_y_f_prime += np.log2(M[inverse(f_prime, ciphertext[i]), inverse(f_prime, ciphertext[i-1])]).squeeze()
+        fN = inverse_vec(f, ciphertext)
+        fpN = inverse_vec(f_prime, ciphertext)
+        p_y_f += np.log2(P[fN[0]])
+        p_y_f_prime +=np.log2( P[fpN[0]])
+
+        p_y_f += np.log2(M[fN[1:], fN[:-1]]).sum()
+        p_y_f_prime += np.log2(M[fpN[1:], fpN[:-1]]).sum()
+        
+
+        # f_Nm1 = inverse_vec(f, ciphertext)
+        # fp_Nm1 = inverse_vec(f_prime, ciphertext)
+        # f_N = f_Nm1[1:]
+        # f_Nm1 = f_Nm1[:-1]
+        # fp_N = fp_Nm1[1:]
+        # fp_Nm1 = fp_Nm1[:-1]
+
+        # p_y_f += np.log2(P[f_Nm1[0]])
+        # p_y_f_prime +=np.log2( P[fp_Nm1[0]])
+
+        # p_y_f += np.log2(M[f_N, f_Nm1]).sum()
+        # p_y_f_prime += np.log2(M[fp_N, fp_Nm1]).sum()
         
         if  p_y_f_prime > p_y_f:
             a = 1
         else:
-            # Round to 10 decimal places
-            a = min(1, np.round(np.exp(p_y_f_prime - p_y_f), 10))
+            # Round 
+            a = min(1, np.round(np.exp(p_y_f_prime - p_y_f), 2))
         ll = p_y_f/N 
         converged = ll>= entropy_thresh
         return a, converged, ll
     
     def get_plaintext(f, ciphertext):
         """Vectorize with embedding lookup and "".join(inverse(f, ciphertext))"""
-        plaintext = ''
-        for i in range(len(ciphertext)):
-            a = alphabet_arr[inverse(f, ciphertext[i])]
-            plaintext += str(a )
-        return plaintext
+        cipher_tok = inverse_vec(f, ciphertext)
+        a = alphabet_arr[cipher_tok]
+        return ''.join(a.tolist())
     
-    def inverse(f, letter:str):
-        """Vectorize lookup"""
-        i = alphabet[letter]
-        return np.where(f == i)[0][0]
+    def inverse_vec(f, text:str):
+        """Returns tokenized plaintext, given ciphertext and cipher f.
+        
+        f is a permutation of indices, indices are tokenized letters from 'alphabet'
+        """
+        ciphertext_tok = np.vectorize(alphabet.__getitem__)(np.array(list(text), dtype=str))
+        sorter = np.argsort(f)
+        plaintext_tokenized = sorter[np.searchsorted(f, ciphertext_tok, sorter=sorter)]
+        return plaintext_tokenized
         
     # Do random init
     f = np.random.permutation(len(P))
@@ -117,10 +117,11 @@ def fast_decode(ciphertext: str, has_breakpoint: bool) -> str:
         if np.random.uniform(0, 1) <= u:
             f = f_prime
 
-        # print("log likelihood", ll)
-        # if DEBUG and iter % 200 == 0:
-        #     print(f"iter #{iter}: log-likelihood (bits): {ll}\ttime (s):{time() - start}")
-        # iter += 1
+        # if iter % 20 == 0:
+        #     print(f"iter {iter}\t log likelihood {ll}\t {time() - start}")
+        if DEBUG and iter % 200 == 0:
+            print(f"iter #{iter}: log-likelihood (bits): {ll}\ttime (s):{time() - start}")
+        iter += 1
 
     # s = time()
     plaintext = get_plaintext(f, ciphertext)
