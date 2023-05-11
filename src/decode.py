@@ -35,24 +35,24 @@ def fast_decode(ciphertext: str, has_breakpoint: bool) -> str:
 
     N = float(len(ciphertext))
 
-    combs =list(combinations(range(len(P)), 2))
-    def sample_proposal(f:np.ndarray):
-        """Returns the first nonzero proposal sampled"""
-        ij = np.random.choice(len(combs))
-        i,j = combs[ij]
-        f_i,f_j = f[i], f[j]
-        f[i] = f_j
-        f[j] = f_i
-        while not is_nonzero(f):
-            combs.pop(ij) # combs[ij] was zero, so don't try sampling this again
-            f[i] = f_i
-            f[j] = f_j
-            ij = np.random.choice(len(combs))
-            i,j = combs[ij]
-            f_i,f_j = f[i], f[j]
-            f[i] = f_j
-            f[j] = f_i
-        return f
+    # combs =list(combinations(range(len(P)), 2))
+    # def sample_proposal(f:np.ndarray):
+    #     """Returns the first nonzero proposal sampled"""
+    #     ij = np.random.choice(len(combs))
+    #     i,j = combs[ij]
+    #     f_i,f_j = f[i], f[j]
+    #     f[i] = f_j
+    #     f[j] = f_i
+    #     while not is_nonzero(f):
+    #         combs.pop(ij) # combs[ij] was zero, so don't try sampling this again
+    #         f[i] = f_i
+    #         f[j] = f_j
+    #         ij = np.random.choice(len(combs))
+    #         i,j = combs[ij]
+    #         f_i,f_j = f[i], f[j]
+    #         f[i] = f_j
+    #         f[j] = f_i
+    #     return f
 
     def is_nonzero(f):
         if np.isclose(P[inverse(f, ciphertext[0])], 0): return False
