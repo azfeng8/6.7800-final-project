@@ -1,8 +1,8 @@
-DEBUG = True
+DEBUG = False
 if DEBUG:
     from time import time
 import numpy as np
-from itertools import combinations
+# from itertools import combinations
 
 # Threshhold from problem 3e in Part I
 entropy_thresh = -3.6
