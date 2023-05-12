@@ -65,37 +65,6 @@ def inverse_vec(f, text:str):
     plaintext_tokenized = sorter[np.searchsorted(f, ciphertext_tok, sorter=sorter)]
     return plaintext_tokenized
 
-def decode_bp_given(ciphertext:str, bp:int) -> str:
-    N = len(ciphertext)
-    converged = False
-    iters = 0
-    # MCMC
-    while not converged:
-
-        f1p = sample_proposal_1(f1)
-        while not is_nonzero(f1p, ciphertext[:bp]):
-            f1p = sample_proposal_1(f1)
-
-        f2p = sample_proposal_1(f2)
-        while not is_nonzero(f2p, ciphertext[bp:]):
-            f2p = sample_proposal_1(f2)
-
-        u1, ll1 = compute_acceptance_bp(f1, f1p, ciphertext[:bp], bp)
-        u2, ll2 = compute_acceptance_bp(f2, f2p, ciphertext[bp:], N - bp)
-
-        if np.random.uniform(0, 1) <= u1:
-            f1 = f1p
-        if np.random.uniform(0,1) <= u2:
-            f2 = f2p
-
-        if DEBUG:
-            print(f"iter {iters}: breakpoint {bp}/{N}\t Log likelihoods: left {ll1} right: {ll2}")
-
-        converged = (entropy_lower_thresh <= (ll1 + ll2) <= entropy_upper_thresh)
-        if converged or iters >= 1000: break
-
-    return get_plaintext_bp(f1, f2, ciphertext, breakpoint=bp)
-
 def decode_bp(ciphertext:str) -> str:
     """Part II.
     
@@ -194,7 +163,7 @@ def decode_bp(ciphertext:str) -> str:
         iters = 0
         # MCMC
         # while not converged:
-        n_iters = 2800
+        n_iters = 2000
         for _ in range(n_iters):
 
             f1p = sample_proposal_1(f1)
@@ -378,3 +347,33 @@ def decode_no_bp(ciphertext: str) -> str:
 #     break
 # End Init code
 
+# def decode_bp_given(ciphertext:str, bp:int) -> str:
+#     N = len(ciphertext)
+#     converged = False
+#     iters = 0
+#     # MCMC
+#     while not converged:
+
+#         f1p = sample_proposal_1(f1)
+#         while not is_nonzero(f1p, ciphertext[:bp]):
+#             f1p = sample_proposal_1(f1)
+
+#         f2p = sample_proposal_1(f2)
+#         while not is_nonzero(f2p, ciphertext[bp:]):
+#             f2p = sample_proposal_1(f2)
+
+#         u1, ll1 = compute_acceptance_bp(f1, f1p, ciphertext[:bp], bp)
+#         u2, ll2 = compute_acceptance_bp(f2, f2p, ciphertext[bp:], N - bp)
+
+#         if np.random.uniform(0, 1) <= u1:
+#             f1 = f1p
+#         if np.random.uniform(0,1) <= u2:
+#             f2 = f2p
+
+#         if DEBUG:
+#             print(f"iter {iters}: breakpoint {bp}/{N}\t Log likelihoods: left {ll1} right: {ll2}")
+
+#         converged = (entropy_lower_thresh <= (ll1 + ll2) <= entropy_upper_thresh)
+#         if converged or iters >= 1000: break
+
+#     return get_plaintext_bp(f1, f2, ciphertext, breakpoint=bp)
