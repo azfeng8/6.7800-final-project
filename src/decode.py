@@ -1,12 +1,12 @@
-DEBUG = True
+DEBUG = False
 if DEBUG:
     from time import time
     from itertools import combinations
     start = time()
 import numpy as np
 
-entropy_lower_thresh = -3.5
-entropy_upper_thresh = -2.5
+entropy_lower_thresh = -3.80
+entropy_upper_thresh = -3.3
 english_entropy = -3.23
 
 P = np.loadtxt('./data/letter_probabilities.csv', delimiter=',')
@@ -40,8 +40,8 @@ def compute_acceptance_bp(f, f_prime, text, N):
         # Round 
         a = min(1, np.round(np.exp(p_y_f_prime - p_y_f), 2))
     ll = p_y_f/N 
-    converged = (ll >= entropy_lower_thresh) and (ll <= entropy_upper_thresh) # set thresholds based on entropy of English from problem 3e in Part I
-    return a, converged, ll
+    # converged = (ll >= entropy_lower_thresh) and (ll <= entropy_upper_thresh) # set thresholds based on entropy of English from problem 3e in Part I
+    return a, ll
 
 def get_plaintext(f, ciphertext):
     """Vectorize with embedding lookup and "".join(inverse(f, ciphertext))"""
@@ -80,8 +80,8 @@ def decode_bp_given(ciphertext:str, bp:int) -> str:
         while not is_nonzero(f2p, ciphertext[bp:]):
             f2p = sample_proposal_1(f2)
 
-        u1, converged_left, ll1 = compute_acceptance_bp(f1, f1p, ciphertext[:bp], bp)
-        u2, converged_right, ll2 = compute_acceptance_bp(f2, f2p, ciphertext[bp:], N - bp)
+        u1, ll1 = compute_acceptance_bp(f1, f1p, ciphertext[:bp], bp)
+        u2, ll2 = compute_acceptance_bp(f2, f2p, ciphertext[bp:], N - bp)
 
         if np.random.uniform(0, 1) <= u1:
             f1 = f1p
@@ -91,7 +91,7 @@ def decode_bp_given(ciphertext:str, bp:int) -> str:
         if DEBUG:
             print(f"iter {iters}: breakpoint {bp}/{N}\t Log likelihoods: left {ll1} right: {ll2}")
 
-        converged = converged_left and converged_right
+        converged = (entropy_lower_thresh <= (ll1 + ll2) <= entropy_upper_thresh)
         if converged or iters >= 1000: break
 
     return get_plaintext_bp(f1, f2, ciphertext, breakpoint=bp)
@@ -110,10 +110,11 @@ def decode_bp(ciphertext:str) -> str:
         str: _description_
     """
 
-    s = time()
+    if DEBUG:
+        s = time()
+        with open('./data/sample/short_plaintext.txt', 'r') as f:
+            gt_arr = np.array(list(''.join(f.readlines())), dtype=str)
 
-    with open('./data/sample/short_plaintext.txt', 'r') as f:
-        gt_arr = np.array(list(''.join(f.readlines())), dtype=str)
     def pick_breakpoint(current_idx, left=False, stochastic=False):
         """
         Use function-scoped "breakpoints"
@@ -154,7 +155,7 @@ def decode_bp(ciphertext:str) -> str:
 
     breakpoint = breakpoints.pop(int(N//2))
     # Rank best breakpoints by number of iterations they got
-    best_breakpoint_info = (-1, (-1, -1, -1), 999)# (max iter)  (bp number, f1, f2), (l2 loss)
+    best_breakpoint_info = (-1, (-1, -1, -1))# (max iter)  (bp number, f1, f2)
     left = None
     while True:
 
@@ -192,7 +193,9 @@ def decode_bp(ciphertext:str) -> str:
         converged = False
         iters = 0
         # MCMC
-        while not converged:
+        # while not converged:
+        n_iters = 2800
+        for _ in range(n_iters):
 
             f1p = sample_proposal_1(f1)
             while not is_nonzero(f1p, ciphertext[:breakpoint]):
@@ -202,31 +205,26 @@ def decode_bp(ciphertext:str) -> str:
             while not is_nonzero(f2p, ciphertext[breakpoint:]):
                 f2p = sample_proposal_1(f2)
 
-            u1, converged_left, ll1 = compute_acceptance_bp(f1, f1p, ciphertext[:breakpoint], N)
-            u2, converged_right, ll2 = compute_acceptance_bp(f2, f2p, ciphertext[breakpoint:], N)
+            u1, ll1 = compute_acceptance_bp(f1, f1p, ciphertext[:breakpoint], N)
+            u2, ll2 = compute_acceptance_bp(f2, f2p, ciphertext[breakpoint:], N)
 
             if np.random.uniform(0, 1) <= u1:
                 f1 = f1p
             if np.random.uniform(0,1) <= u2:
                 f2 = f2p
 
-            # Save it
-            loss = (ll1 - english_entropy)**2 + (ll2 - english_entropy)**2
-            if loss < best_breakpoint_info[2]:
-                best_breakpoint_info = (iters, (breakpoint, f1, f2), loss)
+
+            if iters == n_iters - 1:
                 if DEBUG:
                     pt = get_plaintext_bp(f1, f2, ciphertext, breakpoint)
-                    acc = np.sum(gt_arr == np.array(list(pt), dtype=str)) / (N)
-                    print(f"[BEST LL] iter {iters}: breakpoint {breakpoint}/{N}\t Log likelihoods: left {ll1} right: {ll2} bp_left: {len(breakpoints)} acc: {acc}")
-                    print(pt)
-            converged = converged_left and converged_right
-            if converged: break
+                    acc = (gt_arr == np.array(list(pt), dtype=str)).sum() / float(N)
 
-            if iters >= 1300:
-                pt = get_plaintext_bp(f1, f2, ciphertext, breakpoint)
-                acc = (gt_arr == np.array(list(pt), dtype=str)).sum() / float(N)
-                print(f"iter {iters}: breakpoint {breakpoint}/{N}\t Log likelihoods: left {ll1} right: {ll2} bp_left: {len(breakpoints)} acc: {acc}")
-                print(pt)
+                    print(f"iter {iters}: breakpoint {breakpoint}/{N}\t Log likelihoods: left {ll1} right: {ll2} bp_left: {len(breakpoints)} acc: {acc}")
+                    print(pt)
+
+                converged = entropy_lower_thresh <= (ll1 + ll2) <= entropy_upper_thresh
+                if converged:
+                    best_breakpoint_info = (iters, (breakpoint, f1, f2))
 
                 if ll1 >= ll2:
                     # breakpoint to right
@@ -236,11 +234,12 @@ def decode_bp(ciphertext:str) -> str:
                 breakpoint = pick_breakpoint(breakpoint, left, stochastic=True)
                 break
 
-
             iters += 1
+
         if converged:
             break
-    print(time() - s)
+    if DEBUG:
+        print(time() - s)
     return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
 
 
