@@ -5,7 +5,7 @@ if DEBUG:
     start = time()
 import numpy as np
 
-entropy_lower_thresh = -3.80
+entropy_lower_thresh = -3.65
 entropy_upper_thresh = -3.3
 english_entropy = -3.23
 
