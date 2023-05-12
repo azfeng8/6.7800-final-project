@@ -5,13 +5,17 @@ if DEBUG:
     start = time()
 import numpy as np
 
-# Threshhold from problem 3e in Part I
-entropy_thresh = -3.5
+entropy_lower_thresh = -4.2
+entropy_upper_thresh = -2.3
+english_entropy = -3.23
 
 P = np.loadtxt('./data/letter_probabilities.csv', delimiter=',')
 M = np.loadtxt('./data/letter_transition_matrix.csv', delimiter=',')
 alphabet_arr = np.loadtxt('./data/alphabet.csv', delimiter=',', dtype=str).squeeze()
 alphabet = {letter: idx for idx, letter in enumerate(alphabet_arr)}
+
+def get_plaintext_bp(f1, f2, ciphertext, breakpoint):
+    return get_plaintext(f1, ciphertext[:breakpoint]) + get_plaintext(f2, ciphertext[breakpoint:])
 
 def get_plaintext(f, ciphertext):
     """Vectorize with embedding lookup and "".join(inverse(f, ciphertext))"""
@@ -86,7 +90,7 @@ def decode_bp(ciphertext:str) -> str:
             # Round 
             a = min(1, np.round(np.exp(p_y_f_prime - p_y_f), 2))
         ll = p_y_f/N 
-        converged = ll>= entropy_thresh and ll <= -3.1
+        converged = (ll >= entropy_lower_thresh) and (ll <= entropy_upper_thresh) # set thresholds based on entropy of English from problem 3e in Part I
         return a, converged, ll
 
     with open('./data/sample/short_plaintext.txt', 'r') as f:
@@ -94,14 +98,21 @@ def decode_bp(ciphertext:str) -> str:
 
     N = float(len(ciphertext))
     # Get a nonzero init for both ciphers
-    breakpoints = list(range(int(N)))
-    breakpoint = breakpoints.pop(np.random.choice(len(breakpoints)))
+    breakpoints = list(range(1, int(N) - 1))
     # If sampling proposal has this many times get a nonzero f, choose another breakpoint b/c this one unlikely
-    thresh = 500
-    thresh1 = 500 # same reason as for `thresh`, but used in the nonzero checking when sampling the distr
+    thresh = 1500
+    thresh1 = 2000 # same reason as for `thresh`, but used in the nonzero checking when sampling the distr
 
+    # Rank best breakpoints by number of iterations they got
+    best_breakpoint_info = (-1, (-1, -1, -1), 999)# max iter:  (bp number, f1, f2), (l2 loss)
+    # # breakpts left when to stop
+    STOP = N - N//4
     while True:
+
         # Init at new breakpoint
+        if len(breakpoints) <= STOP:
+            return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
+        breakpoint = breakpoints.pop(np.random.choice(len(breakpoints)))
         while True:
             if DEBUG:
                 print(breakpoint)
@@ -116,6 +127,8 @@ def decode_bp(ciphertext:str) -> str:
                     break
                     
             if retry:
+                if len(breakpoints) <= STOP:
+                    return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
                 breakpoint = breakpoints.pop(np.random.choice(len(breakpoints)))
                 continue
             f2 = np.random.permutation(len(P))
@@ -128,6 +141,8 @@ def decode_bp(ciphertext:str) -> str:
                 j+=1
 
             if retry:
+                if len(breakpoints) <= STOP:
+                    return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
                 breakpoint = breakpoints.pop(np.random.choice(len(breakpoints)))
                 continue
             break
@@ -165,22 +180,30 @@ def decode_bp(ciphertext:str) -> str:
             u1, converged_left, ll1 = compute_acceptance(f1, f1p, ciphertext[:breakpoint])
             u2, converged_right, ll2 = compute_acceptance(f2, f2p, ciphertext[breakpoint:])
 
-            if DEBUG:
-                print(f"iter {iters}: breakpoint {breakpoint}/{N}\t Log likelihoods: left {ll1} right: {ll2}")
 
             if np.random.uniform(0, 1) <= u1:
                 f1 = f1p
             if np.random.uniform(0,1) <= u2:
                 f2 = f2p
 
+
+            loss = (ll1 - english_entropy)**2 + (ll2 - english_entropy)**2
+            if loss < best_breakpoint_info[2]:
+                best_breakpoint_info = (iters, (breakpoint, f1, f2), loss)
+                print(f"[BEST] iter {iters}: breakpoint {breakpoint}/{N}\t Log likelihoods: left {ll1} right: {ll2} bp_left: {len(breakpoints)}")
+            elif DEBUG:
+                print(f"iter {iters}: breakpoint {breakpoint}/{N}\t Log likelihoods: left {ll1} right: {ll2} bp_left: {len(breakpoints)}")
+            # if best_breakpoint_info[0] < iters:
+            #     best_breakpoint_info = (iters, (breakpoint, f1, f2))
+
             converged = converged_left and converged_right
 
-            if iters >= 1500:
+            if iters >= 1300 or ll1 >= entropy_lower_thresh or ll2 >= entropy_lower_thresh: # entropy of english is -3.23 so shouldn't be greater than that
                 break # init at new breakpoint
-            iters += 1
-        plaintext = get_plaintext(f1, ciphertext[:breakpoint]) + get_plaintext(f2, ciphertext[breakpoint:])
-        return plaintext
 
+            iters += 1
+        if converged:
+            return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
 
 
 def decode_no_bp(ciphertext: str) -> str:
@@ -217,9 +240,8 @@ def decode_no_bp(ciphertext: str) -> str:
             # Round 
             a = min(1, np.round(np.exp(p_y_f_prime - p_y_f), 2))
         ll = p_y_f/N 
-        converged = ll>= entropy_thresh
+        converged = ll>= entropy_lower_thresh
         return a, converged, ll
-    
    
     # Do random init
     f = np.random.permutation(len(P))
@@ -243,29 +265,12 @@ def decode_no_bp(ciphertext: str) -> str:
         #     print(f"iter #{iter}: log-likelihood (bits): {ll}\ttime (s):{time() - start}\tu:{u}")
         if iter == 3000:
             break
+        # if DEBUG:
+        # print(f"iter {iter} ll: {ll}")
         iter += 1
 
     plaintext = get_plaintext(f, ciphertext)
     return plaintext
-            # def sample_proposal(f:np.ndarray):
-    #     """Returns the first nonzero proposal sampled"""
-    #     combs =list(combinations(range(len(P)), 2))
-    #     ij = np.random.choice(len(combs))
-    #     i,j = combs[ij]
-    #     f_i,f_j = f[i], f[j]
-    #     f[i] = f_j
-    #     f[j] = f_i
-    #     while not is_nonzero(f):
-    #         combs.pop(ij) # combs[ij] was zero, so don't try sampling this again
-    #         f[i] = f_i
-    #         f[j] = f_j
-    #         ij = np.random.choice(len(combs))
-    #         i,j = combs[ij]
-    #         f_i,f_j = f[i], f[j]
-    #         f[i] = f_j
-    #         f[j] = f_i
-    #     return f
-
 
     def find_f1_f2_bp_random():
         while True:
