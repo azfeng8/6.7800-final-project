@@ -163,7 +163,7 @@ def decode_bp(ciphertext:str) -> str:
         iters = 0
         # MCMC
         # while not converged:
-        n_iters = 2000
+        n_iters = 2800
         for _ in range(n_iters):
 
             f1p = sample_proposal_1(f1)
