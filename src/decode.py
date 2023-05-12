@@ -5,8 +5,8 @@ if DEBUG:
     start = time()
 import numpy as np
 
-entropy_lower_thresh = -4.2
-entropy_upper_thresh = -2.3
+entropy_lower_thresh = -3.5
+entropy_upper_thresh = -2.5
 english_entropy = -3.23
 
 P = np.loadtxt('./data/letter_probabilities.csv', delimiter=',')
@@ -44,12 +44,7 @@ def decode_bp(ciphertext:str) -> str:
     
     2. Design and implement breakpoint (max likelihood of 2 ciphers, some split letter in the text)
     
-    start guess at middle. then move left or right depending on which likelihood larger.
-        l_left > l_right: move left
-        l_right > l_left: move right
-    repeat until both likelihoods are larger than some threshold
-    may wait some iterations in between moves, or try every iteration
-
+    After found "Best", then Overfit, and return
 
     Args:
         ciphertext (str): _description_
@@ -58,6 +53,7 @@ def decode_bp(ciphertext:str) -> str:
         str: _description_
     """
 
+    s = time()
     def is_nonzero(f, text, verbose=False):
         plain_tok = inverse_vec(f, text)
         if np.isclose(P[plain_tok[0]], 0): 
@@ -100,7 +96,7 @@ def decode_bp(ciphertext:str) -> str:
     # Get a nonzero init for both ciphers
     breakpoints = list(range(1, int(N) - 1))
     # If sampling proposal has this many times get a nonzero f, choose another breakpoint b/c this one unlikely
-    thresh = 1500
+    thresh = 1000
     thresh1 = 2000 # same reason as for `thresh`, but used in the nonzero checking when sampling the distr
 
     # Rank best breakpoints by number of iterations they got
@@ -111,7 +107,7 @@ def decode_bp(ciphertext:str) -> str:
 
         # Init at new breakpoint
         if len(breakpoints) <= STOP:
-            return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
+            break
         breakpoint = breakpoints.pop(np.random.choice(len(breakpoints)))
         while True:
             if DEBUG:
@@ -128,7 +124,7 @@ def decode_bp(ciphertext:str) -> str:
                     
             if retry:
                 if len(breakpoints) <= STOP:
-                    return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
+                    break
                 breakpoint = breakpoints.pop(np.random.choice(len(breakpoints)))
                 continue
             f2 = np.random.permutation(len(P))
@@ -142,50 +138,59 @@ def decode_bp(ciphertext:str) -> str:
 
             if retry:
                 if len(breakpoints) <= STOP:
-                    return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
+                    break
                 breakpoint = breakpoints.pop(np.random.choice(len(breakpoints)))
                 continue
             break
         # End Init code
+
+        skip_breaks = False
+        
+        if len(breakpoints) <= STOP:
+            f1 = best_breakpoint_info[1][1]
+            f2 = best_breakpoint_info[1][2]
+            breakpoint = best_breakpoint_info[1][0]
+            skip_breaks = True
 
         converged = False
         iters = 0
         # MCMC
         while not converged:
 
+            # retry = False
             f1p = sample_proposal_1(f1)
-            x = 0
+            # x = 0
             while not is_nonzero(f1p, ciphertext[:breakpoint]):
                 f1p = sample_proposal_1(f1)
-                if x >= thresh1:
-                    retry = True
-                    break
-                x += 1
+                # if not skip_breaks and x >= thresh1:
+                #     retry = True
+                #     print('hit')
+                #     break
+                # x += 1
 
-            if retry:
-                break # init at new breakpoint
+            # if not skip_breaks and retry:
+            #     break # init at new breakpoint
 
             f2p = sample_proposal_1(f2)
-            y=0
+            # y=0
             while not is_nonzero(f2p, ciphertext[breakpoint:]):
                 f2p = sample_proposal_1(f2)
-                if y >= thresh1:
-                    retry = True
-                    break
-                y+=1
+                # if not skip_breaks and y >= thresh1:
+                #     retry = True
+                #     print('hit 2')
+                #     break
+                # y+=1
 
-            if retry:
-                break # init at new breakpoint
+            # if not skip_breaks and retry:
+            #     break # init at new breakpoint
 
             u1, converged_left, ll1 = compute_acceptance(f1, f1p, ciphertext[:breakpoint])
             u2, converged_right, ll2 = compute_acceptance(f2, f2p, ciphertext[breakpoint:])
-
 
             if np.random.uniform(0, 1) <= u1:
                 f1 = f1p
             if np.random.uniform(0,1) <= u2:
                 f2 = f2p
-
 
             loss = (ll1 - english_entropy)**2 + (ll2 - english_entropy)**2
             if loss < best_breakpoint_info[2]:
@@ -198,12 +203,14 @@ def decode_bp(ciphertext:str) -> str:
 
             converged = converged_left and converged_right
 
-            if iters >= 1300 or ll1 >= entropy_lower_thresh or ll2 >= entropy_lower_thresh: # entropy of english is -3.23 so shouldn't be greater than that
+            if (not skip_breaks) and (iters >= 1300) or (ll1 >= entropy_upper_thresh) or (ll2 >= entropy_upper_thresh): # entropy of english is -3.23 so shouldn't be greater than that
                 break # init at new breakpoint
 
             iters += 1
         if converged:
-            return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
+            break
+    print(time() - s)
+    return get_plaintext_bp(best_breakpoint_info[1][1], best_breakpoint_info[1][2], ciphertext, breakpoint=best_breakpoint_info[1][0])
 
 
 def decode_no_bp(ciphertext: str) -> str:
